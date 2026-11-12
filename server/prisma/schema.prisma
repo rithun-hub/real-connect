@@ -1,0 +1,177 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum OtpPurpose {
+  LOGIN
+  NEW_DEVICE
+}
+
+enum OtpStatus {
+  PENDING
+  VERIFIED
+  FAILED
+  EXPIRED
+}
+
+enum MeetingStatus {
+  SCHEDULED
+  ACTIVE
+  ENDED
+}
+
+enum ConnectionQuality {
+  EXCELLENT
+  GOOD
+  FAIR
+  POOR
+  DISCONNECTED
+}
+
+model User {
+  id        Int      @id @default(autoincrement())
+  name      String
+  email     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions         Session[]
+  loginHistory     LoginHistory[]
+  otpVerifications OtpVerification[]
+  trustedDevices   TrustedDevice[]
+  meetings         Meeting[]
+  participants     Participant[]
+  chatMessages     ChatMessage[]
+}
+
+model Session {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model LoginHistory {
+  id                  Int      @id @default(autoincrement())
+  userId              Int
+  publicIp            String?
+  browser             String?
+  browserVersion      String?
+  operatingSystem     String?
+  deviceType          String?
+  deviceModel         String?
+  city                String?
+  state               String?
+  country              String?
+  approximateLocation String?
+  loginAt             DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, loginAt])
+}
+
+model OtpVerification {
+  id         Int        @id @default(autoincrement())
+  userId     Int
+  codeHash   String
+  purpose    OtpPurpose
+  status     OtpStatus  @default(PENDING)
+  attempts   Int        @default(0)
+  expiresAt  DateTime
+  verifiedAt DateTime?
+  createdAt  DateTime   @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose, createdAt])
+}
+
+model TrustedDevice {
+  id                Int      @id @default(autoincrement())
+  userId            Int
+  deviceName        String?
+  deviceType        String?
+  browser           String?
+  operatingSystem   String?
+  deviceFingerprint String
+  trustedUntil      DateTime
+  createdAt         DateTime @default(now())
+  lastUsedAt        DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, deviceFingerprint])
+  @@index([userId, trustedUntil])
+}
+
+model Meeting {
+  id                    Int           @id @default(autoincrement())
+  roomId                String        @unique
+  title                 String?
+  hostId                Int
+  status                MeetingStatus @default(SCHEDULED)
+  maxParticipants       Int           @default(10)
+  isLocked              Boolean       @default(false)
+  screenSharingAllowed  Boolean       @default(true)
+  chatAllowed           Boolean       @default(true)
+  startedAt             DateTime?
+  endedAt               DateTime?
+  createdAt              DateTime      @default(now())
+
+  host         User          @relation(fields: [hostId], references: [id], onDelete: Cascade)
+  participants Participant[]
+  chatMessages ChatMessage[]
+
+  @@index([hostId])
+  @@index([status])
+}
+
+model Participant {
+  id                Int               @id @default(autoincrement())
+  meetingId         Int
+  userId            Int
+  isMuted           Boolean           @default(false)
+  cameraEnabled     Boolean           @default(true)
+  screenSharing     Boolean           @default(false)
+  handRaised        Boolean           @default(false)
+  isCoHost          Boolean           @default(false)
+  isSpeaking        Boolean           @default(false)
+  connectionQuality ConnectionQuality @default(GOOD)
+  joinedAt          DateTime          @default(now())
+  leftAt            DateTime?
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, userId])
+  @@index([meetingId])
+  @@index([userId])
+}
+
+model ChatMessage {
+  id        Int      @id @default(autoincrement())
+  meetingId Int
+  userId    Int
+  message   String
+  isEdited  Boolean  @default(false)
+  isDeleted Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  meeting Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([meetingId, createdAt])
+  @@index([userId])
+}
